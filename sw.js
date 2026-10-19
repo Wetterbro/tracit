@@ -5,7 +5,7 @@
  * - OpenCV.js (~10 MB, versioned CDN URL) is cached on install and served
  *   cache-first forever, so tracking works offline after the first visit.
  */
-const VERSION = 'tracit-v2';
+const VERSION = 'tracit-v3';
 const CV_CACHE = 'tracit-opencv-4.10.0-r1';
 const OPENCV_URL = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js';
 
@@ -31,7 +31,8 @@ const APP_FILES = [
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(VERSION);
-    await cache.addAll(APP_FILES);
+    // cache: 'reload' bypasses the browser HTTP cache (GitHub Pages sends max-age=600).
+    await cache.addAll(APP_FILES.map(u => new Request(u, { cache: 'reload' })));
     // OpenCV is best-effort here; it is also cached on first use below.
     try {
       const cv = await caches.open(CV_CACHE);
@@ -62,7 +63,7 @@ self.addEventListener('fetch', (event) => {
 
   if (req.mode === 'navigate') {
     // Network first for the page so updates show up; fall back to the cached shell offline.
-    event.respondWith(fetch(req).then((res) => {
+    event.respondWith(fetch(req, { cache: 'no-cache' }).then((res) => {
       const copy = res.clone();
       caches.open(VERSION).then(c => c.put('index.html', copy));
       return res;
@@ -84,7 +85,9 @@ async function cacheFirst(name, req) {
 async function networkFirst(name, req) {
   const cache = await caches.open(name);
   try {
-    const res = await fetch(req);
+    // 'no-cache' revalidates with the server so a fresh deploy is never masked
+    // by a stale HTTP-cached copy.
+    const res = await fetch(req, { cache: 'no-cache' });
     if (res.ok) cache.put(req, res.clone());
     return res;
   } catch {

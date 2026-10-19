@@ -16,6 +16,7 @@ import { TrackerClient } from './tracker-client.js';
 import { startCamera, stopCamera, listCameras, pickMainRear, grabFrame, WakeLock, torchSupported, setTorch } from './camera.js';
 import { loadSession, saveSession, clearSession, debounce } from './storage.js';
 
+export const APP_VERSION = '3';
 const CANVAS_W = 640;           // canvas-space width (= tracking target width)
 const MAX_TEX = 2048;           // references are downscaled to fit this
 const LOW_FEATURES = 250;       // fewer target keypoints than this -> show texture tip
@@ -51,6 +52,7 @@ async function main() {
     return showError('WebGL not available', err.message + ' Tracit needs WebGL2 (Chrome on Android supports it).', false);
   }
   bindUI();
+  $('version').textContent = `Version ${APP_VERSION}`;
   onResize();
   window.addEventListener('resize', onResize);
   screen.orientation && screen.orientation.addEventListener && screen.orientation.addEventListener('change', onResize);
@@ -111,8 +113,9 @@ async function openCamera() {
  * rest. The choice is remembered on this device.
  */
 async function switchCamera() {
+  hint('Switching camera…');
   const cams = await listCameras();
-  if (cams.length < 2) return hint('Only one camera found');
+  if (cams.length < 2) return hint(`Only ${cams.length} camera found`);
   const main = pickMainRear(cams);
   const isBack = c => /back|rear|environment/i.test(c.label);
   const ordered = [...cams].sort((a, b) => (b === main) - (a === main) || isBack(b) - isBack(a));

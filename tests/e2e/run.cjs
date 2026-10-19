@@ -89,6 +89,12 @@ function serve() {
   await page.waitForTimeout(800);
   await page.screenshot({ path: path.join(OUT, 'trace-landscape.png') });
 
+  // Camera switch button responds (the fake device is a single camera)
+  await page.click('#btn-cam');
+  await page.waitForTimeout(500);
+  const camHint = await page.evaluate(() => !document.getElementById('hint').hidden && document.getElementById('hint').textContent);
+  check(!!camHint, `camera button responds: "${camHint}"`);
+
   // Freeze / resume
   await page.click('#btn-freeze');
   check(await page.evaluate(() => document.getElementById('video').paused), 'freeze pauses the camera image');

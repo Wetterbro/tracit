@@ -1,0 +1,16 @@
+{
+  "name": "tracit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Trace reference images onto paper using your phone camera (static PWA).",
+  "scripts": {
+    "test": "node tests/math.test.mjs && node tests/tracker.test.cjs",
+    "serve": "python3 -m http.server 8080",
+    "test:e2e": "node tests/e2e/make-video.cjs tests/out/fake-camera.y4m && node tests/e2e/run.cjs"
+  },
+  "devDependencies": {
+    "@techstark/opencv-js": "4.10.0-release.1",
+    "playwright": "^1.64.1"
+  }
+}

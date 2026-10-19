@@ -1,10 +1,11 @@
 /*
  * Service worker: offline support.
- * - App shell is precached and served cache-first (bump VERSION on release).
+ * - App shell is precached and served network-first, so updates show up on
+ *   the next launch while online and the cache is used offline.
  * - OpenCV.js (~10 MB, versioned CDN URL) is cached on install and served
  *   cache-first forever, so tracking works offline after the first visit.
  */
-const VERSION = 'tracit-v1';
+const VERSION = 'tracit-v2';
 const CV_CACHE = 'tracit-opencv-4.10.0-r1';
 const OPENCV_URL = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js';
 
@@ -68,7 +69,7 @@ self.addEventListener('fetch', (event) => {
     }).catch(async () => (await caches.match('index.html')) || Response.error()));
     return;
   }
-  event.respondWith(staleWhileRevalidate(VERSION, req));
+  event.respondWith(networkFirst(VERSION, req));
 });
 
 async function cacheFirst(name, req) {
@@ -80,12 +81,13 @@ async function cacheFirst(name, req) {
   return res;
 }
 
-async function staleWhileRevalidate(name, req) {
+async function networkFirst(name, req) {
   const cache = await caches.open(name);
-  const hit = await cache.match(req, { ignoreSearch: true });
-  const net = fetch(req).then((res) => {
+  try {
+    const res = await fetch(req);
     if (res.ok) cache.put(req, res.clone());
     return res;
-  }).catch(() => null);
-  return hit || (await net) || Response.error();
+  } catch {
+    return (await cache.match(req, { ignoreSearch: true })) || Response.error();
+  }
 }

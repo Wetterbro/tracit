@@ -2,24 +2,37 @@
  * Rear camera access, snapshot capture, torch and screen wake lock.
  */
 
-/** Start the rear camera at the highest practical resolution (1080p ideal). */
-export async function startCamera(video) {
+/**
+ * Start a camera. With a deviceId that exact camera is opened; otherwise the
+ * rear camera is requested and then, on phones with several rear lenses, the
+ * main one is chosen (see pickMainRear). Returns {stream, track, deviceId}.
+ */
+export async function startCamera(video, deviceId) {
   if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     throw friendlyError({ name: 'InsecureContext' });
   }
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: 30 },
-      },
-    });
-  } catch (err) {
-    throw friendlyError(err);
+  const size = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
+  const tries = deviceId
+    ? [{ deviceId: { exact: deviceId }, ...size }, { facingMode: { ideal: 'environment' }, ...size }]
+    : [{ facingMode: { exact: 'environment' }, ...size }, { facingMode: { ideal: 'environment' }, ...size }];
+  let stream, lastErr;
+  for (const constraints of tries) {
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: constraints }); break; }
+    catch (err) {
+      lastErr = err;
+      if (err.name !== 'OverconstrainedError' && err.name !== 'NotFoundError') break;
+    }
+  }
+  if (!stream) throw friendlyError(lastErr);
+  if (!deviceId) {
+    // facingMode alone often lands on an ultra-wide or tele lens on multi-camera
+    // phones. Device labels are available now that permission was granted.
+    const main = pickMainRear(await listCameras());
+    const current = stream.getVideoTracks()[0].getSettings().deviceId;
+    if (main && main.deviceId !== current) {
+      stream.getTracks().forEach(t => t.stop());
+      return startCamera(video, main.deviceId);
+    }
   }
   video.srcObject = stream;
   video.setAttribute('playsinline', '');
@@ -34,7 +47,26 @@ export async function startCamera(video) {
       await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
     }
   } catch { /* optional */ }
-  return { stream, track };
+  return { stream, track, deviceId: track.getSettings().deviceId };
+}
+
+/** All video inputs (labels are filled in after camera permission is granted). */
+export async function listCameras() {
+  try {
+    return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+  } catch { return []; }
+}
+
+/**
+ * Choose the main rear camera. Chrome on Android labels cameras like
+ * "camera2 0, facing back"; the lowest-numbered back camera is the main wide
+ * lens, higher numbers are usually ultra-wide, tele or depth sensors.
+ */
+export function pickMainRear(cams) {
+  const back = cams.filter(c => /back|rear|environment|r\u00fcck/i.test(c.label));
+  if (!back.length) return null;
+  const num = c => { const m = c.label.match(/camera2?\s*(\d+)/i); return m ? +m[1] : 99; };
+  return back.slice().sort((a, b) => num(a) - num(b))[0];
 }
 
 export function stopCamera(video) {

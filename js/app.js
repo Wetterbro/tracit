@@ -13,7 +13,7 @@ import * as M from './math.js';
 import { Renderer } from './renderer.js';
 import { Gestures } from './gestures.js';
 import { TrackerClient } from './tracker-client.js';
-import { startCamera, grabFrame, WakeLock, torchSupported, setTorch } from './camera.js';
+import { startCamera, stopCamera, listCameras, pickMainRear, grabFrame, WakeLock, torchSupported, setTorch } from './camera.js';
 import { loadSession, saveSession, clearSession, debounce } from './storage.js';
 
 const CANVAS_W = 640;           // canvas-space width (= tracking target width)
@@ -90,15 +90,44 @@ async function loadTracker() {
   }
 }
 
+const CAMERA_KEY = 'tracit.cameraId';
+
 async function openCamera() {
+  let saved = null;
+  try { saved = localStorage.getItem(CAMERA_KEY); } catch { /* storage blocked */ }
   try {
-    state.camera = await startCamera(video);
+    state.camera = await startCamera(video, saved || undefined);
     $('torch-row').hidden = !torchSupported(state.camera.track);
     wakeLock.enable();
     return true;
   } catch (err) {
     showError('Camera unavailable', err.message, true);
     return false;
+  }
+}
+
+/**
+ * Cycle to the next camera: rear cameras first (main lens first), then the
+ * rest. The choice is remembered on this device.
+ */
+async function switchCamera() {
+  const cams = await listCameras();
+  if (cams.length < 2) return hint('Only one camera found');
+  const main = pickMainRear(cams);
+  const isBack = c => /back|rear|environment/i.test(c.label);
+  const ordered = [...cams].sort((a, b) => (b === main) - (a === main) || isBack(b) - isBack(a));
+  const cur = state.camera ? state.camera.deviceId : null;
+  const next = ordered[(ordered.findIndex(c => c.deviceId === cur) + 1) % ordered.length];
+  stopCamera(video);
+  try {
+    state.camera = await startCamera(video, next.deviceId);
+    try { localStorage.setItem(CAMERA_KEY, state.camera.deviceId); } catch { /* ignore */ }
+    $('torch-row').hidden = !torchSupported(state.camera.track);
+    tracker.reset();
+    const idx = ordered.findIndex(c => c.deviceId === state.camera.deviceId) + 1;
+    hint(`Camera ${idx} of ${ordered.length}: ${next.label || 'camera'}`);
+  } catch (err) {
+    showError('Camera unavailable', err.message, true);
   }
 }
 
@@ -451,6 +480,7 @@ function bindUI() {
   $('btn-hide').onclick = () => setUIHidden(true);
   $('btn-show').onclick = () => setUIHidden(false);
   $('btn-full').onclick = toggleFullscreen;
+  $('btn-cam').onclick = switchCamera;
   document.querySelectorAll('.sheet .close').forEach(b => (b.onclick = () => (b.closest('.sheet').hidden = true)));
   $('tip').querySelector('.close').onclick = () => ($('tip').hidden = true);
   $('error-close').onclick = () => ($('error').hidden = true);

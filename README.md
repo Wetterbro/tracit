@@ -30,6 +30,7 @@ Open it in Chrome on Android. It's a static site, so nothing is uploaded and all
 | **Lock** | Locks placement so your hand touching the screen can't move anything. |
 | **Freeze** | Pauses the camera image and the overlay so you can study them. Tap the view (or **Resume**) to continue. |
 | **Place / Trace** | Switch between placing on the photo and live tracing. You can also move, scale and rotate references in Trace mode; the gestures are mapped through the live perspective. |
+| **Camera switch** (top right) | Cycles through your phone's cameras if Tracit picked the wrong lens. The choice is remembered. |
 | **⛶ / ⌄** (top right) | Fullscreen, and hide all controls (the ☰ button brings them back). |
 | **Settings** | Grid cells, smoothing (steadier vs. more responsive), tracking resolution (480 px fast / 640 px precise), performance stats, flashlight (if your phone supports it), recapture canvas, clear session. |
 
@@ -118,7 +119,7 @@ You asked me to decide things myself, so here is what I chose and why.
 
 1. **OpenCV.js build:** `@techstark/opencv-js@4.10.0-release.1` from jsDelivr. It's the official OpenCV 4.10 WASM build packaged on npm, so it's pinned, CORS-enabled (the service worker can cache it) and identical to the copy the tests use. Its single file (~10 MB) includes ORB, BFMatcher, `calcOpticalFlowPyrLK`, `findHomography` and `goodFeaturesToTrack`. Its ORB binding can't take the score-type constructor argument, so parameters are set with setters.
 2. **Worker:** tracking runs in a classic Web Worker. OpenCV is fetched with `fetch()` so the loading bar shows real progress, then evaluated with `importScripts(blob:)`.
-3. **Camera resolution:** 1920×1080 "ideal" with continuous autofocus when supported. Higher resolutions don't improve tracking (frames are downscaled to 480 px anyway) and cost bandwidth and battery. The canvas snapshot is stored at full camera resolution so the photo looks sharp in Place mode.
+3. **Camera choice and resolution:** phones with several rear lenses often hand out an ultra-wide or tele lens for a plain "rear camera" request, so Tracit picks the lowest-numbered back camera (Chrome labels them `camera2 0, facing back`, …), which is the main lens, and offers a switch button for anything else. 1920×1080 "ideal" with continuous autofocus when supported. Higher resolutions don't improve tracking (frames are downscaled to 480 px anyway) and cost bandwidth and battery. The canvas snapshot is stored at full camera resolution so the photo looks sharp in Place mode.
 4. **Canvas = the whole captured photo.** I didn't add a step to crop the paper out of the photo, because the area around the paper (desk texture) actually helps tracking, and it keeps the flow to one tap. The grid covers the whole photo for the same reason.
 5. **Extra flow points:** besides ORB inliers, Shi-Tomasi corners are seeded inside the detected sheet. ORB inliers alone are often too few and too clustered on a sparse sheet, and LK tracks corners better than ORB keypoints.
 6. **Forward-backward LK check** instead of trusting LK's error value. It costs a second LK pass but rejects drifting points reliably.
@@ -130,7 +131,7 @@ You asked me to decide things myself, so here is what I chose and why.
 12. **Freeze** pauses the `<video>` element (which freezes the last camera frame) and stops tracking, so image and overlay stay together. A short tap resumes, and drags still adjust references while frozen.
 13. **Lost tracking:** hold for 1 s, then fade over 0.7 s, as you specified. Filters reset when the sheet is found again.
 14. **Storage:** one IndexedDB record (snapshot and reference images as Blobs plus all settings), saved 0.6 s after any change. References are re-decoded on restore. Large references are downscaled to 2048 px for the GPU, and the original file is what gets saved.
-15. **Offline:** the service worker precaches the app files and OpenCV.js. App files are served stale-while-revalidate, so an update shows up on the second launch after it's published. OpenCV is cache-first because its URL is versioned.
+15. **Offline:** the service worker precaches the app files and OpenCV.js. App files are served network-first, so updates show up on the next launch while online, and the cache is used offline. OpenCV is cache-first because its URL is versioned.
 16. **PWA display:** `fullscreen` with any orientation. Portrait uses a bottom toolbar and bottom sheets. Landscape on phones uses a right-hand toolbar and side panels. All controls can be hidden.
 17. **Hosting:** GitHub Pages straight from the `main` branch root (no build step). A `.nojekyll` file keeps Pages from running Jekyll.
 18. **No frameworks, no build:** plain ES modules, so the deployed files are the source files.
